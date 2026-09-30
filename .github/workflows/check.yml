@@ -1,0 +1,74 @@
+name: Check formula
+
+# The install gate of the release flow (harell-cli plans/016 §3): the release
+# workflow opens a pull request on this repo with the rendered formula, this
+# workflow installs and tests it on every supported platform, and a
+# maintainer merges. Make it a required status check on `main`. Only pull
+# requests from branches of this repo (the release bot) are checked; a
+# fork's formula is never installed on a runner.
+
+on:
+  pull_request:
+    paths: ["Formula/**"]
+  push:
+    branches: [main]
+    paths: ["Formula/**"]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    # Same-repo pull requests and pushes to main only.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    strategy:
+      fail-fast: false
+      matrix:
+        # One runner per formula branch: darwin/arm64, darwin/amd64,
+        # linux/amd64, linux/arm64.
+        os: [macos-latest, macos-26-intel, ubuntu-latest, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    env:
+      HOMEBREW_NO_AUTO_UPDATE: "1"
+      HOMEBREW_NO_INSTALL_CLEANUP: "1"
+      HOMEBREW_NO_ANALYTICS: "1"
+      HOMEBREW_NO_ENV_HINTS: "1"
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          # Same-repo PR: check out the PR head, not a merge commit.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Formula sha256 stanzas must match the release's checksums.txt
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          version=$(sed -n 's/^  version "\(.*\)"$/\1/p' Formula/harell.rb)
+          test -n "$version"
+          gh release download "v$version" --repo "$GITHUB_REPOSITORY" --pattern checksums.txt --dir release
+          count=0
+          for sha in $(sed -n 's/^ *sha256 "\([0-9a-f]\{64\}\)"$/\1/p' Formula/harell.rb); do
+            grep -q "^$sha  " release/checksums.txt || { echo "::error::sha256 $sha in Formula/harell.rb is not in the v$version release checksums"; exit 1; }
+            count=$((count + 1))
+          done
+          test "$count" -eq 4
+
+      - name: Put Homebrew on PATH (Linux)
+        if: runner.os == 'Linux'
+        run: echo "/home/linuxbrew/.linuxbrew/bin" >> "$GITHUB_PATH"
+
+      - name: Install the formula from a throwaway tap
+        run: |
+          set -euo pipefail
+          brew tap-new --no-git harell-ci/candidate
+          cp Formula/harell.rb "$(brew --repository harell-ci/candidate)/Formula/harell.rb"
+          # `--except version`: GoReleaser writes an explicit version stanza
+          # that Homebrew's audit reports as redundant with the URL's version.
+          brew audit --strict --online --except version harell-ci/candidate/harell
+          brew install harell-ci/candidate/harell
+          harell version | tee version.txt
+          version=$(sed -n 's/^  version "\(.*\)"$/\1/p' Formula/harell.rb)
+          grep -F "harell-cli v$version " version.txt
+          brew test harell-ci/candidate/harell
