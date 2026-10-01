@@ -9,7 +9,8 @@ name: Check formula
 #
 # Every same-repo pull request runs it, so a README or workflow change can
 # satisfy the required checks too. With no Formula/harell.rb (a new tap, before
-# the first stable release) the check passes without installing anything.
+# the first stable release) the check passes without installing anything; a
+# change that removes an existing formula fails (.github/scripts/formula-present.sh).
 
 on:
   pull_request:
@@ -45,13 +46,23 @@ jobs:
 
       - name: Is there a formula to check?
         id: formula
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE_REF: ${{ github.base_ref }}
+          BEFORE: ${{ github.event.before }}
         run: |
-          if [ -f Formula/harell.rb ]; then
-            echo "present=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "::notice::No Formula/harell.rb; nothing to install"
-            echo "present=false" >> "$GITHUB_OUTPUT"
+          set -euo pipefail
+          # Compare with the commit this change replaces: the pull request's
+          # base, or the previous tip of main for a push.
+          previous=""
+          if [ "$EVENT" = pull_request ]; then
+            git fetch --depth=1 origin "$BASE_REF"
+            previous="$(git rev-parse FETCH_HEAD)"
+          elif [ -n "$BEFORE" ] && [ "$BEFORE" != 0000000000000000000000000000000000000000 ]; then
+            git fetch --depth=1 origin "$BEFORE"
+            previous="$BEFORE"
           fi
+          bash .github/scripts/formula-present.sh "$previous"
 
       - name: Formula sha256 stanzas must match the release's checksums.txt
         if: steps.formula.outputs.present == 'true'
