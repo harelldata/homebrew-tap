@@ -17,9 +17,12 @@ brew uninstall harell
 brew untap harelldata/tap
 ```
 
-Uninstalling leaves your Harell configuration and session in place:
-`~/Library/Application Support/harell` on macOS, `~/.config/harell` on Linux
-(or `$XDG_CONFIG_HOME/harell`). Delete that directory to remove them.
+Uninstalling leaves your Harell configuration and session in place. To remove
+them too, run `harell logout` before uninstalling, then delete the
+configuration directory: `~/Library/Application Support/harell` on macOS,
+`~/.config/harell` on Linux (or `$XDG_CONFIG_HOME/harell`). Also delete
+`~/.config/harell` if it exists: older releases stored configuration and
+sessions there, and Harell still reads it as a fallback.
 
 Supported: macOS (Apple silicon and Intel) and Linux (x86_64 and arm64).
 
