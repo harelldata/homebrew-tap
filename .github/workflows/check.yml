@@ -1,15 +1,18 @@
 name: Check formula
 
-# The install gate of the release flow (harell-cli plans/016 §3): the release
+# The install gate of the release flow: the release
 # workflow opens a pull request on this repo with the rendered formula, this
 # workflow installs and tests it on every supported platform, and a
 # maintainer merges. Make it a required status check on `main`. Only pull
 # requests from branches of this repo (the release bot) are checked; a
 # fork's formula is never installed on a runner.
+#
+# Every same-repo pull request runs it, so a README or workflow change can
+# satisfy the required checks too. With no Formula/harell.rb (a new tap, before
+# the first stable release) the check passes without installing anything.
 
 on:
   pull_request:
-    paths: ["Formula/**"]
   push:
     branches: [main]
     paths: ["Formula/**"]
@@ -40,7 +43,18 @@ jobs:
           # Same-repo PR: check out the PR head, not a merge commit.
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
+      - name: Is there a formula to check?
+        id: formula
+        run: |
+          if [ -f Formula/harell.rb ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::No Formula/harell.rb; nothing to install"
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Formula sha256 stanzas must match the release's checksums.txt
+        if: steps.formula.outputs.present == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -56,10 +70,11 @@ jobs:
           test "$count" -eq 4
 
       - name: Put Homebrew on PATH (Linux)
-        if: runner.os == 'Linux'
+        if: runner.os == 'Linux' && steps.formula.outputs.present == 'true'
         run: echo "/home/linuxbrew/.linuxbrew/bin" >> "$GITHUB_PATH"
 
       - name: Install the formula from a throwaway tap
+        if: steps.formula.outputs.present == 'true'
         run: |
           set -euo pipefail
           brew tap-new --no-git harell-ci/candidate

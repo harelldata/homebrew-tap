@@ -13,9 +13,13 @@ Upgrade and remove:
 
 ```sh
 brew update && brew upgrade harell
-brew uninstall harell        # your ~/.config/harell is left in place
+brew uninstall harell
 brew untap harelldata/tap
 ```
+
+Uninstalling leaves your Harell configuration and session in place:
+`~/Library/Application Support/harell` on macOS, `~/.config/harell` on Linux
+(or `$XDG_CONFIG_HOME/harell`). Delete that directory to remove them.
 
 Supported: macOS (Apple silicon and Intel) and Linux (x86_64 and arm64).
 
@@ -45,6 +49,7 @@ Open an issue on this repository with the output of `brew config`,
 stable release, `harell-release-bot` pushes it to a `harell-<version>` branch
 and opens a pull request; the `Check formula` workflow verifies it against the
 release's `checksums.txt` and installs and tests it on macOS (Apple silicon
-and Intel) and Linux (x86_64 and arm64); a maintainer merges. `main` accepts
-no direct pushes. Please do not edit the formula by hand; propose a pull
+and Intel) and Linux (x86_64 and arm64); a code owner approves and a
+maintainer merges. `main` accepts no direct pushes, and every change needs a
+code owner's approval. Please do not edit the formula by hand; propose a pull
 request and the same checks run.
